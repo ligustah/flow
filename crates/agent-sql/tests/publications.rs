@@ -165,7 +165,7 @@ async fn test_publication_data_operations() {
     // Expect all flows that can be resolved, are resolved. Others are ignored.
     agent_sql::publications::insert_live_spec_flows(
         Id::from_hex("cc00000000000000").unwrap(),
-        &Some(agent_sql::CatalogType::Test),
+        agent_sql::CatalogType::Test,
         Some(vec!["aliceCo/First/Thing", "does/not/exist"]),
         Some(vec![
             "aliceCo/First/Thing",
@@ -225,12 +225,9 @@ async fn test_publication_data_operations() {
         .await
         .unwrap();
 
-        agent_sql::publications::delete_data_processing_alerts(
-            &row.catalog_name,
-            &mut txn,
-        )
-        .await
-        .unwrap();
+        agent_sql::publications::delete_data_processing_alerts(&row.catalog_name, &mut txn)
+            .await
+            .unwrap();
 
         agent_sql::drafts::delete_spec(row.draft_spec_id, &mut txn)
             .await
@@ -261,11 +258,13 @@ async fn test_publication_data_operations() {
     });
 
     // Expect `alert_data_processing` is now empty.
-    assert!(sqlx::query("select catalog_name from alert_data_processing")
-    .fetch_optional(&mut txn)
-    .await
-    .unwrap()
-    .is_none());
+    assert!(
+        sqlx::query("select catalog_name from alert_data_processing")
+            .fetch_optional(&mut txn)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -303,15 +302,9 @@ async fn test_tenant_usage_quotas() {
     .await
     .unwrap();
 
-    let res = agent_sql::publications::find_tenant_quotas(
-        vec![
-            Id::from_hex("1000000000000000").unwrap(), // usageA/
-            Id::from_hex("6000000000000000").unwrap(), // usageB/
-        ],
-        &mut txn,
-    )
-    .await
-    .unwrap();
+    let res = agent_sql::publications::find_tenant_quotas(&["usageA/", "usageB/"], &mut *txn)
+        .await
+        .unwrap();
 
     insta::assert_debug_snapshot!(res, @r#"
         [

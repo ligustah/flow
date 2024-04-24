@@ -170,4 +170,8 @@ impl super::ModelDef for MaterializationDef {
     fn targets(&self) -> impl Iterator<Item = &crate::Collection> {
         std::iter::empty()
     }
+
+    fn catalog_type(&self) -> crate::CatalogType {
+        crate::CatalogType::Materialization
+    }
 }

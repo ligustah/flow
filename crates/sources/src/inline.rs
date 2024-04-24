@@ -11,6 +11,7 @@ pub fn inline_draft_catalog(catalog: &mut tables::DraftCatalog) {
         resources,
         tests,
         errors: _,
+        storage_mappings: _,
     } = catalog;
 
     for capture in captures.iter_mut() {

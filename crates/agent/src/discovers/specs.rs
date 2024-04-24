@@ -124,6 +124,7 @@ pub fn merge_capture(
             bindings: fetched_bindings,
             interval,
             shards,
+            expect_pub_id: _, // The persisted model always has this set to None.
         }) => (fetched_bindings, interval, shards, auto_discover),
 
         None => (
@@ -213,6 +214,7 @@ pub fn merge_capture(
             bindings: capture_bindings,
             interval,
             shards,
+            expect_pub_id: None,
         },
         filtered_bindings,
     ))
@@ -251,6 +253,7 @@ pub fn merge_collections(
                     projections: Default::default(),
                     journals: Default::default(),
                     derive: None,
+                    expect_pub_id: None,
                 });
 
         if collection.read_schema.is_some() {

@@ -1,4 +1,10 @@
-use models::ModelDef;
+use crate::{
+    AnySpec, DraftCapture, DraftCollection, DraftMaterialization, DraftTest, Error, LiveCapture,
+    LiveCollection, LiveMaterialization, LiveTest,
+};
+use anyhow::Context;
+use models::{CatalogType, ModelDef};
+use serde_json::value::RawValue;
 
 impl super::DraftCatalog {
     /// Retrieve all catalog names which are included or referenced
@@ -34,6 +40,120 @@ impl super::DraftCatalog {
         out.dedup();
 
         out
+    }
+
+    pub fn add_any_spec(
+        &mut self,
+        catalog_name: &str,
+        spec: AnySpec,
+        expect_pub_id: Option<models::Id>,
+    ) {
+        let scope = crate::synthetic_scope(spec.catalog_type(), catalog_name);
+        match spec {
+            AnySpec::Capture(model) => {
+                self.captures.insert(DraftCapture {
+                    capture: models::Capture::new(catalog_name),
+                    expect_pub_id,
+                    scope,
+                    model: Some(model),
+                });
+            }
+            AnySpec::Collection(model) => {
+                self.collections.insert(DraftCollection {
+                    collection: models::Collection::new(catalog_name),
+                    expect_pub_id,
+                    scope,
+                    model: Some(model),
+                });
+            }
+            AnySpec::Materialization(model) => {
+                self.materializations.insert(DraftMaterialization {
+                    materialization: models::Materialization::new(catalog_name),
+                    expect_pub_id,
+                    scope,
+                    model: Some(model),
+                });
+            }
+            AnySpec::Test(model) => {
+                self.tests.insert(DraftTest {
+                    test: models::Test::new(catalog_name),
+                    expect_pub_id,
+                    scope,
+                    model: Some(model),
+                });
+            }
+        }
+    }
+
+    pub fn add_spec(
+        &mut self,
+        spec_type: models::CatalogType,
+        catalog_name: &str,
+        scope: url::Url,
+        expect_pub_id: Option<models::Id>,
+        model_json: &RawValue,
+    ) -> Result<(), Error> {
+        match spec_type {
+            models::CatalogType::Capture => {
+                let model = serde_json::from_str(model_json.get())
+                    .context("deserializing draft capture spec")
+                    .map_err(|error| Error {
+                        scope: scope.clone(),
+                        error,
+                    })?;
+
+                self.captures.insert(DraftCapture {
+                    capture: models::Capture::new(catalog_name),
+                    scope,
+                    expect_pub_id,
+                    model,
+                });
+            }
+            models::CatalogType::Collection => {
+                let model = serde_json::from_str(model_json.get())
+                    .context("deserializing draft collection spec")
+                    .map_err(|error| Error {
+                        scope: scope.clone(),
+                        error,
+                    })?;
+                self.collections.insert(DraftCollection {
+                    collection: models::Collection::new(catalog_name),
+                    scope,
+                    expect_pub_id,
+                    model,
+                });
+            }
+            models::CatalogType::Materialization => {
+                let model = serde_json::from_str(model_json.get())
+                    .context("deserializing draft materialization spec")
+                    .map_err(|error| Error {
+                        scope: scope.clone(),
+                        error,
+                    })?;
+                self.materializations.insert(DraftMaterialization {
+                    materialization: models::Materialization::new(catalog_name),
+                    scope,
+                    expect_pub_id,
+                    model,
+                });
+            }
+            models::CatalogType::Test => {
+                let model = serde_json::from_str(model_json.get())
+                    .context("deserializing draft test spec")
+                    .map_err(|error| Error {
+                        scope: scope.clone(),
+                        error,
+                    })?;
+                self.tests.insert(DraftTest {
+                    test: models::Test::new(catalog_name),
+                    scope,
+                    expect_pub_id,
+                    model,
+                });
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -239,5 +359,76 @@ impl DraftRow for crate::DraftTest {
     }
     fn model(&self) -> Option<&Self::ModelDef> {
         self.model.as_ref()
+    }
+}
+
+impl From<LiveCapture> for DraftCapture {
+    fn from(value: LiveCapture) -> Self {
+        let LiveCapture {
+            scope,
+            capture,
+            last_pub_id,
+            model,
+            spec: _,
+        } = value;
+        DraftCapture {
+            scope,
+            capture,
+            expect_pub_id: Some(last_pub_id),
+            model: Some(model),
+        }
+    }
+}
+
+impl From<LiveCollection> for DraftCollection {
+    fn from(value: LiveCollection) -> Self {
+        let LiveCollection {
+            scope,
+            collection,
+            last_pub_id,
+            model,
+            spec: _,
+        } = value;
+        DraftCollection {
+            scope,
+            collection,
+            expect_pub_id: Some(last_pub_id),
+            model: Some(model),
+        }
+    }
+}
+
+impl From<LiveMaterialization> for DraftMaterialization {
+    fn from(value: LiveMaterialization) -> Self {
+        let LiveMaterialization {
+            materialization,
+            spec: _,
+            model,
+            scope,
+            last_pub_id,
+        } = value;
+        DraftMaterialization {
+            scope,
+            materialization,
+            expect_pub_id: Some(last_pub_id),
+            model: Some(model),
+        }
+    }
+}
+impl From<LiveTest> for DraftTest {
+    fn from(value: LiveTest) -> Self {
+        let LiveTest {
+            test,
+            last_pub_id,
+            spec: _,
+            model,
+            scope,
+        } = value;
+        DraftTest {
+            scope,
+            test,
+            expect_pub_id: Some(last_pub_id),
+            model: Some(model),
+        }
     }
 }

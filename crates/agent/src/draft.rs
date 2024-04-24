@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use crate::publications::LockFailure;
+
 use super::Id;
 use agent_sql::{drafts as drafts_sql, CatalogType};
 use anyhow::Context;
@@ -9,6 +11,46 @@ pub struct Error {
     pub catalog_name: String,
     pub scope: Option<String>,
     pub detail: String,
+}
+
+impl Error {
+    // TODO: can remove draft::Error::to_tables_error?
+    // pub fn to_tables_error(&self) -> tables::Error {
+    //     // Use a bogus scope. This is admittedly pretty dumb, but it's only used temporarily by
+    //     // controllers, which need to observe failed publications.
+    //     let mut scope = url::Url::parse("flow://unknown/").unwrap();
+    //     scope.set_path(&self.catalog_name);
+    //     tables::Error {
+    //         scope,
+    //         error: anyhow::Error::msg(self.detail.clone()),
+    //     }
+    // }
+
+    pub fn from_tables_error(err: &tables::Error) -> Self {
+        let catalog_name = tables::parse_synthetic_scope(&err.scope)
+            .map(|(_, name)| name)
+            .unwrap_or_default();
+        Error {
+            catalog_name,
+            scope: Some(err.scope.to_string()),
+            // use alternate to print chained contexts
+            detail: format!("{:#}", err.error),
+        }
+    }
+}
+
+impl From<LockFailure> for Error {
+    fn from(err: LockFailure) -> Self {
+        let detail = format!(
+            "the expectVersionId of spec {:?} {:?} did not match that of the live spec {:?}",
+            err.catalog_name, err.expect_pub_id, err.last_pub_id
+        );
+        Error {
+            catalog_name: err.catalog_name,
+            detail,
+            scope: None,
+        }
+    }
 }
 
 /// upsert_specs updates the given draft with specifications of the catalog.

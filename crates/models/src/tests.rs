@@ -163,6 +163,10 @@ impl super::ModelDef for TestDef {
             Some(&ingest.collection)
         })
     }
+
+    fn catalog_type(&self) -> crate::CatalogType {
+        crate::CatalogType::Test
+    }
 }
 
 // TEMPORARY: support a custom deserializer that maps from the legacy array

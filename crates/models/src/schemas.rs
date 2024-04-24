@@ -41,6 +41,10 @@ impl Schema {
         self.0
     }
 
+    pub fn to_value(&self) -> serde_json::Value {
+        self.0.to_value()
+    }
+
     // URL for referencing the inferred schema of a collection, which may be used within a read schema.
     pub const REF_INFERRED_SCHEMA_URL: &'static str = "flow://inferred-schema";
     // URL for referencing the write schema of a collection, which may be used within a read schema.

@@ -14,6 +14,14 @@ impl Id {
     pub fn is_zero(&self) -> bool {
         self.0 == [0u8; 8]
     }
+    pub fn as_array(&self) -> [u8; 8] {
+        self.0
+    }
+
+    pub fn from_parts(timestamp: u64, seq: u16, shard: u16) -> Self {
+        let int_val = timestamp << 23 | (seq as u64) << 10 | shard as u64;
+        Self::new(int_val.to_be_bytes())
+    }
 }
 
 impl std::str::FromStr for Id {
@@ -31,7 +39,7 @@ impl std::fmt::Display for Id {
         let mut s = String::with_capacity(23);
 
         for (ind, b) in self.0.iter().enumerate() {
-            if ind != 0 {
+            if ind != 0 && f.alternate() {
                 s.push(':');
             }
             write!(&mut s, "{b:02x}").unwrap();
@@ -74,5 +82,46 @@ impl<'de> serde::Deserialize<'de> for Id {
         use serde::de::Error;
         let str_val = std::borrow::Cow::<'de, str>::deserialize(deserializer)?;
         Id::from_str(str_val.as_ref()).map_err(|err| D::Error::custom(format!("invalid id: {err}")))
+    }
+}
+
+/// Generates unique IDs that are compatible with the `flowid` generation in postgres.
+#[derive(Debug, Clone)]
+pub struct IdGenerator {
+    shard: u16,
+    seq: u16,
+    last_timestamp: u64,
+}
+impl IdGenerator {
+    /// Return a new generator with the given shard id.
+    pub fn new(shard: u16) -> Self {
+        Self {
+            shard,
+            seq: 0,
+            last_timestamp: 0,
+        }
+    }
+
+    /// Generate and return the next unique id.
+    pub fn next(&mut self) -> Id {
+        // Estuary epoch is the first representable timestamp in generated IDs.
+        // This could be zero, but subtracting |estuary_epoch| results in the
+        // high bit being zero for the next ~34 years,
+        // making ID representations equivalent for both signed and
+        // unsigned 64-bit integers.
+        const ESTUARY_EPOCH: u64 = 1600000000;
+
+        let mut timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        timestamp -= ESTUARY_EPOCH;
+        if timestamp == self.last_timestamp {
+            self.seq += 1;
+        } else {
+            self.seq = 0;
+            self.last_timestamp = timestamp;
+        }
+        Id::from_parts(timestamp, self.seq, self.shard)
     }
 }
