@@ -421,7 +421,7 @@ source document, in order to co-locate that processing with other
 documents it may need to know about.
 
 For example, transforms of the
-[Approving Transfers example](#approving-transfers)
+[Approving Transfers example](../getting-started/tutorials/derivations_acmebank.md#approving-transfers)
 shuffle on either `/sender` or `/recipient` in order to
 process documents that debit or credit accounts on the specific shard
 that is uniquely responsible for maintaining the balance of a given account.
