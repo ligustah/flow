@@ -76,6 +76,17 @@ impl Schema {
         .unwrap()
     }
 
+    pub fn default_inferred_read_schema(write_schema: &Self) -> Self {
+        let read_schema = serde_json::json!({
+            "allOf": [
+                {"$ref": "flow://write-schema"},
+                {"$ref": "flow://inferred-schema"}
+            ],
+        });
+        let read_bundle = Self(crate::RawValue::from_value(&read_schema));
+        Self::extend_read_bundle(&read_bundle, write_schema, None)
+    }
+
     /// Extend a bundled Flow read schema, which may include references to the
     /// canonical collection write schema URI and inferred schema URI,
     /// with inline definitions that fully resolve these references.

@@ -8,6 +8,11 @@ use sqlx::types::Uuid;
 
 mod specs;
 
+// TODO: discovers should get a similar treatment as publications...
+// - Create `pub async fn discover(discover_args: ...) -> Result<tables::DraftCatalog>`
+// - call that function from the handler
+// - create a `ControlPlane::discover` function for use by controllers
+
 /// JobStatus is the possible outcomes of a handled discover operation.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
