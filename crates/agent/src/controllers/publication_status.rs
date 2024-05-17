@@ -195,6 +195,11 @@ impl PublicationStatus {
             .await?;
         self.record_result(PublicationInfo::observed(&result));
 
+        if result.publication_status.is_success() {
+            cp.notify_dependents(state.catalog_name.clone(), result.publication_id)
+                .await?;
+        }
+
         Ok(result)
     }
 
