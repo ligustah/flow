@@ -142,9 +142,16 @@ pub async fn build_catalog(
 
     let build_result = tokio_context
         .spawn(async move {
-            let built =
-                validation::validate(pub_id, build_id, &project_root, &connectors, &draft, &live)
-                    .await;
+            let built = validation::validate(
+                pub_id,
+                build_id,
+                &project_root,
+                &connectors,
+                &draft,
+                &live,
+                true, // fail_fast
+            )
+            .await;
             build::Output { draft, live, built }
         })
         .await

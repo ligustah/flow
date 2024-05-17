@@ -661,6 +661,14 @@ impl ControlPlane for MockControlPlane {
         todo!()
     }
 
+    async fn notify_dependents(
+        &mut self,
+        catalog_name: String,
+        publication_id: Id,
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+
     async fn get_live_specs(
         &mut self,
         names: BTreeSet<String>,

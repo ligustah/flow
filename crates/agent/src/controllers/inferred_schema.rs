@@ -36,10 +36,22 @@ impl InferredSchemaStatus {
             .await?;
 
         if let Some(inferred_schema) = maybe_inferred_schema {
-            if self.schema_md5.as_ref() != Some(&inferred_schema.md5) {
+            let tables::InferredSchema {
+                collection_name,
+                schema,
+                md5,
+            } = inferred_schema;
+
+            if self.schema_md5.as_ref() != Some(&md5) {
+                tracing::info!(
+                    %collection_name,
+                    prev_md5 = ?self.schema_md5,
+                    new_md5 = ?md5,
+                    "updating inferred schema"
+                );
                 let publication = publication_status
                     .pending_draft("updating inferred schema".to_string(), control_plane);
-                let model =
+                let draft_row =
                     publication
                         .draft
                         .collections
@@ -52,15 +64,15 @@ impl InferredSchemaStatus {
                             expect_pub_id: Some(state.last_pub_id),
                             model: Some(collection_def.clone()),
                         });
-                update_inferred_schema(model, &inferred_schema);
+                update_inferred_schema(draft_row, &schema)?;
 
                 let pub_result = publication_status
                     .finish_pending_publication(state, control_plane)
                     .await?;
 
                 if pub_result.publication_status.is_success() {
-                    self.schema_md5 = Some(inferred_schema.md5);
-                    self.schema_last_updated = Some(pub_result.completed_at);
+                    self.schema_md5 = Some(md5);
+                    self.schema_last_updated = Some(pub_result.started_at);
                 } else {
                     anyhow::bail!(
                         "Failed to publish inferred schema: {:?}",
@@ -101,32 +113,23 @@ impl InferredSchemaStatus {
 
 fn update_inferred_schema(
     collection: &mut tables::DraftCollection,
-    inferred_schema: &tables::InferredSchema,
-) {
-    let mut schema: serde_json::Value = serde_json::from_str(
-        collection
-            .model
-            .as_mut()
-            .expect("model must be Some")
-            .read_schema
-            .as_ref()
-            .expect("read_schema must be Some if using inferred schema")
-            .get(),
-    )
-    .expect("must be able to parse read_schema as JSON");
+    inferred_schema: &models::Schema,
+) -> anyhow::Result<()> {
+    let Some(model) = collection.model.as_mut() else {
+        anyhow::bail!("missing model to update inferred schema");
+    };
+    let new_read_schema = {
+        let Some(read_schema) = model.read_schema.as_ref() else {
+            anyhow::bail!("model is missing read schema");
+        };
+        let Some(write_schema) = model.write_schema.as_ref() else {
+            anyhow::bail!("model is missing write schema");
+        };
+        models::Schema::extend_read_bundle(read_schema, write_schema, Some(inferred_schema))
+    };
 
-    let defs = schema
-        .as_object_mut()
-        .expect("schema must be an object")
-        .entry("$defs")
-        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()))
-        .as_object_mut()
-        .expect("schema.$defs must be an object");
-
-    defs.insert(
-        "flow://inferred-schema".to_string(),
-        inferred_schema.schema.to_value(),
-    );
+    model.read_schema = Some(new_read_schema);
+    Ok(())
 }
 
 pub fn uses_inferred_schema(collection: &models::CollectionDef) -> bool {

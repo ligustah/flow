@@ -114,6 +114,55 @@ pub async fn update<S: Serialize + Send + Sync + Debug>(
     Ok(())
 }
 
+// TODO: bump tracing level back to debug
+/// Trigger a controller sync of all dependents of the given `catalog_name` that have not already
+/// been published at the given `publication_id`. This will not update any dependents that already
+/// have a `controller_next_run` set to an earlier time than the given `next_run`.
+#[tracing::instrument(level = "info", err, ret, skip(pool))]
+pub async fn notify_dependents(
+    catalog_name: &str,
+    publication_id: Id,
+    next_run: DateTime<Utc>,
+    pool: &sqlx::PgPool,
+) -> sqlx::Result<u64> {
+    // If the catalog_name is a source, then notify all all targets, but only if the flow_type is
+    // not 'capture'. Capture flows treat the capture as the source. But in terms of publication
+    // dependencies, the capture depends on the collection, not the other way around. (Because the
+    // capture spec embeds the collection spec.)
+    let result = sqlx::query!(
+        r#"
+        with dependents as (
+            select lsf.target_id as id
+            from live_specs ls
+            join live_spec_flows lsf on ls.id = lsf.source_id
+            where ls.catalog_name = $1 and lsf.flow_type != 'capture'
+            union
+            select lsf.source_id as id
+            from live_specs ls
+            join live_spec_flows lsf on ls.id = lsf.target_id
+            where ls.catalog_name = $1 and lsf.flow_type = 'capture'
+        ),
+        filtered as (
+            select dependents.id
+            from dependents
+            join live_specs ls on dependents.id = ls.id
+            where (ls.controller_next_run is null or ls.controller_next_run > $3)
+            and ls.last_pub_id < $2::flowid
+        )
+        update live_specs set controller_next_run = $3
+        from filtered
+        where live_specs.id = filtered.id;
+        "#,
+        catalog_name,
+        publication_id as Id,
+        next_run,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected())
+}
+
 // #[tracing::instrument(level = "debug", err, skip_all, fields(n_rows = catalog_names.len()))]
 // pub async fn upsert_many(
 //     txn: &mut sqlx::Transaction<'static, sqlx::Postgres>,

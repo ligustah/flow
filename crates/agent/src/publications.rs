@@ -86,9 +86,9 @@ pub struct LockFailure {
 pub enum JobStatus {
     Queued,
     BuildFailed {
-        #[serde(skip_serializing_if = "Vec::is_empty")]
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
         incompatible_collections: Vec<IncompatibleCollection>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         evolution_id: Option<Id>,
     },
     TestFailed,
@@ -96,7 +96,7 @@ pub enum JobStatus {
     Success {
         /// If any materializations are to be updated in response to this publication,
         /// their publication ids will be included here. This is purely informational.
-        #[serde(skip_serializing_if = "Vec::is_empty")]
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
         linked_materialization_publications: Vec<Id>,
     },
     /// Returned when there are no draft specs (after pruning unbound
@@ -106,7 +106,10 @@ pub enum JobStatus {
     EmptyDraft,
     /// One or more expected `last_pub_id`s did not match the actual `last_pub_id`, indicating that specs
     /// have been changed since the draft was created.
-    ExpectPubIdMismatch(Vec<LockFailure>),
+    ExpectPubIdMismatch {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        failures: Vec<LockFailure>,
+    },
 }
 
 impl JobStatus {
@@ -364,11 +367,12 @@ impl Publisher {
         );
         let mut txn = pool.begin().await?;
 
-        let lock_failures = specs::persist_updates(&mut uncommitted, &mut txn).await?;
+        let failures = specs::persist_updates(&mut uncommitted, &mut txn).await?;
         let completed_at = Utc::now();
-        if !lock_failures.is_empty() {
-            return Ok(uncommitted
-                .into_result(completed_at, JobStatus::ExpectPubIdMismatch(lock_failures)));
+        if !failures.is_empty() {
+            return Ok(
+                uncommitted.into_result(completed_at, JobStatus::ExpectPubIdMismatch { failures })
+            );
         }
 
         let quota_errors =

@@ -535,7 +535,7 @@ async fn do_draft(
         last_pub_id: models::Id,
         pub_id: models::Id,
         spec: Option<RawValue>,
-        spec_type: SpecType,
+        spec_type: CatalogType,
     }
 
     let Row {
@@ -578,7 +578,7 @@ async fn do_draft(
     struct DraftSpec {
         draft_id: models::Id,
         catalog_name: String,
-        spec_type: SpecType,
+        spec_type: CatalogType,
         spec: Option<RawValue>,
         expect_pub_id: models::Id,
     }
@@ -608,7 +608,7 @@ async fn do_draft(
 #[derive(Deserialize, Serialize)]
 pub struct SpecSummaryItem {
     pub catalog_name: String,
-    pub spec_type: SpecType,
+    pub spec_type: CatalogType,
 }
 
 impl SpecSummaryItem {
@@ -624,19 +624,19 @@ impl SpecSummaryItem {
 
         summary.extend(captures.into_iter().map(|r| SpecSummaryItem {
             catalog_name: r.capture.to_string(),
-            spec_type: SpecType::Capture,
+            spec_type: CatalogType::Capture,
         }));
         summary.extend(collections.into_iter().map(|r| SpecSummaryItem {
             catalog_name: r.collection.to_string(),
-            spec_type: SpecType::Collection,
+            spec_type: CatalogType::Collection,
         }));
         summary.extend(materializations.into_iter().map(|r| SpecSummaryItem {
             catalog_name: r.materialization.to_string(),
-            spec_type: SpecType::Materialization,
+            spec_type: CatalogType::Materialization,
         }));
         summary.extend(tests.into_iter().map(|r| SpecSummaryItem {
             catalog_name: r.test.to_string(),
-            spec_type: SpecType::Test,
+            spec_type: CatalogType::Test,
         }));
 
         summary

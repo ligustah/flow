@@ -1,6 +1,13 @@
 use std::fmt::Write;
 use std::str::FromStr;
 
+// Estuary epoch is the first representable timestamp in generated IDs.
+// This could be zero, but subtracting |estuary_epoch| results in the
+// high bit being zero for the next ~34 years,
+// making ID representations equivalent for both signed and
+// unsigned 64-bit integers.
+const ESTUARY_EPOCH_MILLIS: u64 = 1_600_000_000_000;
+
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id([u8; 8]);
 
@@ -21,6 +28,18 @@ impl Id {
     pub fn from_parts(timestamp: u64, seq: u16, shard: u16) -> Self {
         let int_val = timestamp << 23 | (seq as u64) << 10 | shard as u64;
         Self::new(int_val.to_be_bytes())
+    }
+
+    pub fn into_parts(self) -> (u64, u16, u16) {
+        const SEQ_MASK: u64 = (1u64 << 13) - 1;
+        const SHARD_MASK: u64 = (1u64 << 10) - 1;
+
+        let int_val = u64::from_be_bytes(self.0);
+        let timestamp = int_val >> 23;
+
+        let seq = ((int_val >> 10) & SEQ_MASK) as u16;
+        let shard = (int_val & SHARD_MASK) as u16;
+        (timestamp, seq, shard)
     }
 }
 
@@ -104,24 +123,48 @@ impl IdGenerator {
 
     /// Generate and return the next unique id.
     pub fn next(&mut self) -> Id {
-        // Estuary epoch is the first representable timestamp in generated IDs.
-        // This could be zero, but subtracting |estuary_epoch| results in the
-        // high bit being zero for the next ~34 years,
-        // making ID representations equivalent for both signed and
-        // unsigned 64-bit integers.
-        const ESTUARY_EPOCH: u64 = 1600000000;
-
         let mut timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64;
-        timestamp -= ESTUARY_EPOCH;
+        timestamp -= ESTUARY_EPOCH_MILLIS;
+        // Ensure that the timestamp is monotonically increasing, which is not guaranteed
+        // by the system time.
+        timestamp = timestamp.max(self.last_timestamp);
+
         if timestamp == self.last_timestamp {
             self.seq += 1;
+            if self.seq >= (1 << 13) - 1 {
+                // TODO: handle this case more gracefully
+                panic!("sequence overflow");
+            }
         } else {
             self.seq = 0;
             self.last_timestamp = timestamp;
         }
         Id::from_parts(timestamp, self.seq, self.shard)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_id_generation() {
+        let mut gen = IdGenerator::new(789);
+
+        let mut prev_id = gen.next();
+        for i in 0..5000 {
+            let id = gen.next();
+            let (timestamp, seq, shard) = id.into_parts();
+            assert_eq!(gen.shard, shard, "shard mismatch");
+            assert_eq!(gen.last_timestamp, timestamp, "timestamp mismatch");
+
+            assert!(id > prev_id, "ids must increase monotonically");
+            let round_tripped = Id::from_parts(timestamp, seq, shard);
+            assert_eq!(id, round_tripped, "round trip failed at {i}");
+            prev_id = id;
+        }
     }
 }

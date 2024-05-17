@@ -32,7 +32,11 @@ pub trait ControlPlane: Send {
 
     fn next_pub_id(&mut self) -> models::Id;
 
-    //async fn notify_dependents(&mut self, catalog_name: &str, publication_id: models::Id) -> anyhow::Result<()>;
+    async fn notify_dependents(
+        &mut self,
+        catalog_name: String,
+        publication_id: models::Id,
+    ) -> anyhow::Result<()>;
 
     async fn publish(
         &mut self,
@@ -136,6 +140,22 @@ impl PGControlPlane {
 
 #[async_trait::async_trait]
 impl ControlPlane for PGControlPlane {
+    async fn notify_dependents(
+        &mut self,
+        catalog_name: String,
+        publication_id: models::Id,
+    ) -> anyhow::Result<()> {
+        let now = self.current_time();
+        agent_sql::controllers::notify_dependents(
+            &catalog_name,
+            publication_id.into(),
+            now,
+            &self.pool,
+        )
+        .await?;
+        Ok(())
+    }
+
     async fn get_live_specs(
         &mut self,
         names: BTreeSet<String>,
@@ -162,6 +182,32 @@ impl ControlPlane for PGControlPlane {
             )
             .with_context(|| format!("deserializing specs for {:?}", row.catalog_name))?;
         }
+
+        // Fetch inferred schemas and add to live specs.
+        let collection_names = live
+            .collections
+            .iter()
+            .map(|c| c.collection.as_str())
+            .collect::<Vec<_>>();
+        let inferred_schema_rows =
+            agent_sql::live_specs::fetch_inferred_schemas(&collection_names, &self.pool)
+                .await
+                .context("fetching inferred schemas")?;
+        for row in inferred_schema_rows {
+            let agent_sql::live_specs::InferredSchemaRow {
+                collection_name,
+                schema,
+                md5,
+            } = row;
+            let collection_name = models::Collection::new(collection_name);
+            let schema = models::Schema::new(models::RawValue::from(schema.0));
+            live.inferred_schemas.insert(tables::InferredSchema {
+                collection_name,
+                schema,
+                md5,
+            });
+        }
+
         Ok(live)
     }
 

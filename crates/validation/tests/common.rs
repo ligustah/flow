@@ -318,6 +318,7 @@ pub fn run(fixture_yaml: &str, patch_yaml: &str) -> Outcome {
         materializations,
         resources,
         tests,
+        storage_mappings: _, // TODO: use these?
     } = draft;
 
     let tables::LiveCatalog {

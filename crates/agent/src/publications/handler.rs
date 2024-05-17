@@ -134,6 +134,7 @@ impl Publisher {
         tracing::debug!(
             n_drafted = all_drafted_specs.len(),
             errors = draft.errors.len(),
+            spec_names = ?all_drafted_specs,
             "resolved draft specifications"
         );
         if !draft.errors.is_empty() {
@@ -168,6 +169,7 @@ impl Publisher {
             &self.db,
         )
         .await?;
+        let mut expanded_names = Vec::with_capacity(expanded_rows.len());
         for exp in expanded_rows {
             if !exp
                 .user_capability
@@ -194,6 +196,7 @@ impl Publisher {
             ) {
                 draft.errors.push(e);
             }
+            expanded_names.push(exp.catalog_name);
         }
         if !draft.errors.is_empty() {
             return Ok(PublicationResult::new(
@@ -211,6 +214,11 @@ impl Publisher {
                 },
             ));
         }
+        tracing::debug!(
+            n_expanded = expanded_names.len(),
+            ?expanded_names,
+            "expanded draft"
+        );
 
         // TODO: get publication handler tests working again
         // if test_run {
@@ -233,6 +241,15 @@ impl Publisher {
                 row.logs_token,
             )
             .await?;
+        if built.has_errors() {
+            return Ok(built.into_result(
+                chrono::Utc::now(),
+                JobStatus::BuildFailed {
+                    incompatible_collections: Vec::new(),
+                    evolution_id: None,
+                },
+            ));
+        }
 
         if row.dry_run {
             // Add built specs to the draft for dry runs after rolling back other changes that do

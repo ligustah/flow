@@ -57,7 +57,33 @@ pub async fn fetch_live_specs(
     .await
 }
 
-// TODO: re-write query to use `live_spec_flows`
+pub struct InferredSchemaRow {
+    pub collection_name: String,
+    pub schema: Json<Box<RawValue>>,
+    pub md5: String,
+}
+
+pub async fn fetch_inferred_schemas(
+    collections: &[&str],
+    pool: &sqlx::PgPool,
+) -> sqlx::Result<Vec<InferredSchemaRow>> {
+    sqlx::query_as!(
+        InferredSchemaRow,
+        r#"select
+            collection_name,
+            schema as "schema!: Json<Box<RawValue>>",
+            md5 as "md5!: String"
+            from inferred_schemas
+            where collection_name = ANY($1::text[])
+            "#,
+        collections as &[&str],
+    )
+    .fetch_all(pool)
+    .await
+}
+
+/// Queries for all non-deleted `live_specs` that are connected to the given `collection_names` via
+/// `live_spec_flows`.
 pub async fn fetch_expanded_live_specs(
     user_id: Uuid,
     collection_names: &[&str],
@@ -102,7 +128,7 @@ pub async fn fetch_expanded_live_specs(
             ) as "spec_capabilities!: Json<Vec<RoleGrant>>"
         from exp
         join live_specs ls on ls.id = exp.id
-        where ls.catalog_name != any($3) and ls.spec is not null;
+        where ls.spec is not null and not ls.catalog_name = any($3);
         "#,
         user_id,
         collection_names as &[&str],

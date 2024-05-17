@@ -449,15 +449,24 @@ pub async fn resolve_live_specs(
     // We're expecting to get a row for catalog name that's either drafted or referenced
     // by a drafted spec, even if the live spec does not exist. In that case, the row will
     // still contain information on the user and spec capabilities.
+    // Note that `all_catalog_names` returns a sorted and deduplicated list of catalog names.
     let mut all_spec_names = draft
         .all_catalog_names()
         .iter()
         .map(|n| n.to_string())
         .collect::<Vec<_>>();
 
-    // We need to know the names of the ops collections
+    // We need to know the names of the ops collections so that we can skip permission checks for them.
+    // But the ops collections must also be included in the resulting catalog database for use by
+    // the data plane.
     let ops_collection_names = get_ops_collection_names();
-    all_spec_names.extend(ops_collection_names.iter().cloned());
+    for ops_collection in ops_collection_names.iter() {
+        // `all_spec_names` is sorted, so we can use binary search to avoid duplicating the ops
+        // collection names.
+        if let Err(i) = all_spec_names.binary_search(ops_collection) {
+            all_spec_names.insert(i, ops_collection.clone());
+        }
+    }
 
     let rows = agent_sql::live_specs::fetch_live_specs(user_id, &all_spec_names, db)
         .await

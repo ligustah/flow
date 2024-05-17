@@ -789,31 +789,6 @@ pub async fn resolve_collections(
     .await
 }
 
-pub struct InferredSchemaRow {
-    pub collection_name: String,
-    pub schema: Json<Box<RawValue>>,
-    pub md5: String,
-}
-
-pub async fn get_inferred_schemas(
-    collections: Vec<String>,
-    pool: sqlx::PgPool,
-) -> sqlx::Result<Vec<InferredSchemaRow>> {
-    sqlx::query_as!(
-        InferredSchemaRow,
-        r#"select
-            collection_name,
-            schema as "schema!: Json<Box<RawValue>>",
-            md5 as "md5!: String"
-            from inferred_schemas
-            where collection_name = ANY($1::text[])
-            "#,
-        collections as Vec<String>,
-    )
-    .fetch_all(&pool)
-    .await
-}
-
 /// Deletes any `live_specs` (and `publication_specs`) that meet ALL of these criteria:
 /// - were newly created by this (as yet uncommitted) publication
 /// - are not used as the `source` or `target` of any enabled bindings
