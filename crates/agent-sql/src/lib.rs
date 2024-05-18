@@ -18,6 +18,28 @@ mod text_json;
 pub use text_json::TextJson;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "flow_type")]
+#[sqlx(rename_all = "snake_case")]
+pub enum FlowType {
+    Capture,
+    Collection,
+    Materialization,
+    Test,
+    SourceCapture,
+}
+
+impl From<CatalogType> for FlowType {
+    fn from(c: CatalogType) -> Self {
+        match c {
+            CatalogType::Capture => FlowType::Capture,
+            CatalogType::Collection => FlowType::Collection,
+            CatalogType::Materialization => FlowType::Materialization,
+            CatalogType::Test => FlowType::Test,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "catalog_spec_type")]
 #[sqlx(rename_all = "lowercase")]
 pub enum CatalogType {

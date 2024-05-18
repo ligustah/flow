@@ -4,6 +4,7 @@ use sqlx::types::Uuid;
 use std::{collections::BTreeSet, ops::Deref};
 
 use crate::{
+    connector_tags::ConnectorSpec,
     publications::{JobStatus, PublicationResult},
     Publisher,
 };
@@ -51,23 +52,10 @@ pub trait ControlPlane: Send {
         names: BTreeSet<String>,
     ) -> anyhow::Result<tables::LiveCatalog>;
 
-    // async fn get_connected_specs(
-    //     &mut self,
-    //     collection_names: BTreeSet<models::Collection>,
-    // ) -> anyhow::Result<tables::LiveSpecs>;
-
-    // async fn get_live_specs_producing(
-    //     &mut self,
-    //     collection_names: Vec<String>,
-    // ) -> anyhow::Result<tables::LiveSpecs>;
-
-    // async fn get_linked_materializations(
-    //     &mut self,
-    //     capture_names: Vec<String>,
-    // ) -> anyhow::Result<tables::LiveMaterializations>;
-
-    /// Fetches the inferred schemas for the given `collections`. The set of returned schemas
-    /// may be sparse, if some did not exist.
+    async fn get_connector_spec(
+        &mut self,
+        connector_image: String,
+    ) -> anyhow::Result<ConnectorSpec>;
 
     async fn get_inferred_schema(
         &mut self,
@@ -138,6 +126,15 @@ impl PGControlPlane {
     }
 }
 
+pub struct ConnectorSpec {
+    pub protocol: runtime::RuntimeProtocol,
+    pub documentation_url: String,
+    pub endpoint_config_schema: models::Schema,
+    pub resource_config_schema: models::Schema,
+    pub resource_path_pointers: Vec<doc::Pointer>,
+    pub oauth2: Option<Box<RawValue>>,
+}
+
 #[async_trait::async_trait]
 impl ControlPlane for PGControlPlane {
     async fn notify_dependents(
@@ -154,6 +151,40 @@ impl ControlPlane for PGControlPlane {
         )
         .await?;
         Ok(())
+    }
+
+    async fn get_connector_spec(&mut self, image: String) -> anyhow::Result<ConnectorSpec> {
+        let Some((image_name, image_tag)) = image.split_once(':') else {
+            anyhow::bail!("image must be in the form 'name:tag'");
+        };
+        let Some(row) =
+            agent_sql::connector_tags::fetch_connector_spec(image_name, image_tag, &self.pool)
+                .await?
+        else {
+            anyhow::bail!("no connector spec found for image '{}'", image);
+        };
+
+        let agent_sql::connector_tags::ConnectorSpec {
+            protocol,
+            documentation_url,
+            endpoint_config_schema,
+            resource_config_schema,
+            resource_path_pointers,
+            oauth2,
+        } = row;
+        let Some(runtime_protocol) =
+            runtime::RuntimeProtocol::from_database_string_value(&protocol)
+        else {
+            anyhow::bail!("invalid protocol {:?}", row.protocol);
+        };
+        Ok(ConnectorSpec {
+            protocol: runtime_protocol,
+            documentation_url,
+            endpoint_config_schema: endpoint_config_schema.0,
+            resource_config_schema: resource_config_schema.0,
+            resource_path_pointers,
+            oauth2: oauth2.map(|o| o.0),
+        })
     }
 
     async fn get_live_specs(

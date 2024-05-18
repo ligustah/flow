@@ -1,4 +1,4 @@
-mod connector_tags;
+pub(crate) mod connector_tags;
 mod controllers;
 mod controlplane;
 mod directives;

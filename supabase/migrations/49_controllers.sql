@@ -1,5 +1,22 @@
 begin;
 
+create type flow_type as enum (
+  -- These correspond 1:1 with top-level maps of models::Catalog.
+  'capture',
+  'collection',
+  'materialization',
+  'test',
+  -- These do not
+  'source_capture'
+);
+
+-- This works because the `flow_type` enum is a superset of the `catalog_spec_type` enum.
+-- This approach was taken from:
+-- https://www.munderwood.ca/index.php/2015/05/28/altering-postgresql-columns-from-one-enum-to-another/
+alter table live_spec_flows
+alter column flow_type set data type flow_type
+using flow_type::text::flow_type;
+
 -- TODO: create index on `live_specs` to make it easier to lookup by `live_version > observed_version`
 -- TODO: add comments
 alter table live_specs add column controller_next_run timestamptz;

@@ -152,12 +152,23 @@ struct MaterializationStatus {
 impl MaterializationStatus {
     pub async fn update<C: ControlPlane>(
         &mut self,
-        _state: &ControllerState,
-        _control_plane: &mut C,
-        _model: &models::MaterializationDef,
-        _publication_status: &mut PublicationStatus,
+        state: &ControllerState,
+        control_plane: &mut C,
+        model: &models::MaterializationDef,
+        publication_status: &mut PublicationStatus,
     ) -> anyhow::Result<Option<NextRun>> {
-        // TODO: handle source captures
+        if model.source_capture.is_some() {
+            if self.source_capture.is_none() {
+                self.source_capture = Some(SourceCaptureStatus::default());
+            }
+            self.source_capture
+                .as_mut()
+                .unwrap()
+                .update(state, control_plane, model, publication_status)
+                .await?;
+        } else {
+            self.source_capture = None;
+        }
         Ok(None)
     }
 }

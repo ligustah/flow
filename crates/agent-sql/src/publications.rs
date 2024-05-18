@@ -1,3 +1,5 @@
+use crate::FlowType;
+
 use super::{Capability, CatalogType, Id, RoleGrant, TextJson as Json};
 
 use chrono::prelude::*;
@@ -709,8 +711,10 @@ pub async fn insert_live_spec_flows(
     draft_type: CatalogType,
     reads_from: Option<Vec<&str>>,
     writes_to: Option<Vec<&str>>,
+    source_capture: Option<&str>,
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
 ) -> sqlx::Result<()> {
+    let flow_type = FlowType::from(draft_type);
     // Precondition: `reads_from` and `writes_to` may or may not have a live_specs row,
     // and we silently ignore entries which don't match a live_specs row.
     //
@@ -720,16 +724,21 @@ pub async fn insert_live_spec_flows(
     sqlx::query!(
         r#"
         insert into live_spec_flows (source_id, target_id, flow_type)
-            select live_specs.id, $1, $2::catalog_spec_type
+            select live_specs.id, $1, $2::flow_type
             from unnest($3::text[]) as n inner join live_specs on catalog_name = n
         union
             select $1, live_specs.id, $2
-            from unnest($4::text[]) as n inner join live_specs on catalog_name = n;
+            from unnest($4::text[]) as n inner join live_specs on catalog_name = n
+        union
+            select live_specs.id, $1, 'sourceCapture'
+            from live_specs
+            where catalog_name = $5
         "#,
         live_spec_id as Id,
-        draft_type as CatalogType,
+        flow_type as FlowType,
         reads_from as Option<Vec<&str>>,
         writes_to as Option<Vec<&str>>,
+        source_capture,
     )
     .execute(&mut *txn)
     .await?;

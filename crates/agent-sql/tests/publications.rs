@@ -172,6 +172,7 @@ async fn test_publication_data_operations() {
             "aliceCo/Second/Thing",
             "also/does/not/exist",
         ]),
+        None,
         &mut txn,
     )
     .await

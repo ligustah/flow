@@ -75,6 +75,10 @@ pub trait SpecExt {
     fn writes_to(&self) -> BTreeSet<Collection> {
         Default::default()
     }
+
+    fn materialization_source_capture(&self) -> Option<models::Capture> {
+        None
+    }
 }
 
 impl SpecExt for AnySpec {
@@ -129,6 +133,13 @@ impl SpecExt for AnySpec {
             AnySpec::Collection(c) => c.uses_any(collections),
             AnySpec::Materialization(m) => m.uses_any(collections),
             AnySpec::Test(t) => t.uses_any(collections),
+        }
+    }
+
+    fn materialization_source_capture(&self) -> Option<models::Capture> {
+        match self {
+            AnySpec::Materialization(m) => m.materialization_source_capture(),
+            _ => None,
         }
     }
 }
@@ -190,6 +201,10 @@ impl SpecExt for models::MaterializationDef {
 
     fn is_enabled(&self) -> bool {
         !self.shards.disable
+    }
+
+    fn materialization_source_capture(&self) -> Option<models::Capture> {
+        self.source_capture.clone()
     }
 }
 
